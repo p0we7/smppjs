@@ -34,7 +34,10 @@ class Cstring {
         }
 
         valueBuffer.copy(buffer, offset);
-        buffer[offset + valueBuffer.length] = 0;
+
+        if (!setLength) {
+            buffer[offset + valueBuffer.length] = 0;
+        }
 
         return buffer;
     }
