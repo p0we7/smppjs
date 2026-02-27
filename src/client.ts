@@ -34,6 +34,10 @@ export default class Client implements IClient {
         return this.session.connected;
     }
 
+    public get bound(): boolean {
+        return this.session.bound;
+    }
+
     /**
      *
      * @param enquireLink Interval is in milliseconds.
@@ -70,8 +74,13 @@ export default class Client implements IClient {
         this.session.connect({ host, port });
 
         if (this._enquireLink.auto && this._enquireLink.interval) {
-            this.enquireLink();
-            this.autoEnquireLink(this._enquireLink.interval);
+            const interval = this._enquireLink.interval;
+            const onBound = (pdu: Pdu) => {
+                if (pdu.command_status === 0) this.autoEnquireLink(interval);
+            };
+            for (const evt of ['bind_transceiver_resp', 'bind_transmitter_resp', 'bind_receiver_resp'] as const) {
+                this.on(evt, onBound);
+            }
         }
     }
 

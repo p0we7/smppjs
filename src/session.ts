@@ -10,6 +10,7 @@ import {
     SubmitSmFunction,
     SubmitSmParams,
     EnquireLinkFunction,
+    EnquireLinkRespFunction,
     BindReceiverParams,
     BindReceiverFunction,
     UnbindFunction,
@@ -30,6 +31,8 @@ import {
     SubmitMultiFunction,
 } from './types';
 
+const bindRespCommands = new Set(['bind_transceiver_resp', 'bind_transmitter_resp', 'bind_receiver_resp']);
+
 export default class Session {
     private socket!: Socket | TLSSocket;
     private logger!: Logger;
@@ -37,6 +40,7 @@ export default class Session {
     private _sequenceNumber = new Uint32Array(1);
 
     private _connected: boolean = false;
+    private _bound: boolean = false;
 
     public get connected(): boolean {
         return this._connected;
@@ -44,6 +48,14 @@ export default class Session {
 
     private set connected(value: boolean) {
         this._connected = value;
+    }
+
+    public get bound(): boolean {
+        return this._bound;
+    }
+
+    private set bound(value: boolean) {
+        this._bound = value;
     }
 
     public get closed(): boolean {
@@ -86,6 +98,7 @@ export default class Session {
     initResponseEnd(): void {
         this.socket.on('end', () => {
             this.connected = false;
+            this.bound = false;
             this.logger.debug(`disconnect - forced - disconnected from smpp server.`);
             this.socket.destroy();
         });
@@ -98,8 +111,18 @@ export default class Session {
 
                 if (data) {
                     const pdu = this.PDU.readPdu(data);
+                    this.logger.debug(`${pdu.command} - received`, pdu);
                     this.socket.emit('pdu', pdu);
                     this.socket.emit(pdu.command, pdu);
+
+                    if (pdu.command === 'enquire_link') {
+                        const dto = getDTO<EnquireLinkRespFunction>('enquire_link_resp')({});
+                        this.PDU.call({ command: 'enquire_link_resp', sequenceNumber: pdu.sequence_number, dto });
+                    }
+
+                    if (bindRespCommands.has(pdu.command) && pdu.command_status === 0) {
+                        this.bound = true;
+                    }
                 }
             } catch (error) {
                 this.socket.emit('error', error);
@@ -117,6 +140,7 @@ export default class Session {
     disconnect(): boolean {
         this.socket.destroy();
         this.connected = false;
+        this.bound = false;
         this.logger.debug(`disconnect - called - disconnected to smpp server.`);
         return this.socket.closed;
     }
