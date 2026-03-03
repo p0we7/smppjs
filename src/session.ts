@@ -10,7 +10,6 @@ import {
     SubmitSmFunction,
     SubmitSmParams,
     EnquireLinkFunction,
-    EnquireLinkRespFunction,
     BindReceiverParams,
     BindReceiverFunction,
     UnbindFunction,
@@ -114,11 +113,6 @@ export default class Session {
                     this.logger.debug(`${pdu.command} - received`, pdu);
                     this.socket.emit('pdu', pdu);
                     this.socket.emit(pdu.command, pdu);
-
-                    if (pdu.command === 'enquire_link') {
-                        const dto = getDTO<EnquireLinkRespFunction>('enquire_link_resp')({});
-                        this.PDU.call({ command: 'enquire_link_resp', sequenceNumber: pdu.sequence_number, dto });
-                    }
 
                     if (bindRespCommands.has(pdu.command) && pdu.command_status === 0) {
                         this.bound = true;

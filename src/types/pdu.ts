@@ -47,7 +47,6 @@ export type SendCommandName =
     | 'cancel_sm'
     | 'bind_transceiver'
     | 'enquire_link'
-    | 'enquire_link_resp'
     | 'submit_multi'
     | 'data_sm';
 
@@ -63,6 +62,7 @@ export type ResponseCommandName =
     | 'replace_sm_resp'
     | 'cancel_sm_resp'
     | 'bind_transceiver_resp'
+    | 'enquire_link_resp'
     | 'submit_multi_resp'
     | 'data_sm_resp'
     | 'outbind'
