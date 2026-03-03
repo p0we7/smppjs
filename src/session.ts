@@ -30,7 +30,7 @@ import {
     SubmitMultiFunction,
 } from './types';
 
-const bindRespCommands = new Set(['bind_transceiver_resp', 'bind_transmitter_resp', 'bind_receiver_resp']);
+const bindRespCommands = ['bind_transceiver_resp', 'bind_transmitter_resp', 'bind_receiver_resp'];
 
 export default class Session {
     private socket!: Socket | TLSSocket;
@@ -114,7 +114,7 @@ export default class Session {
                     this.socket.emit('pdu', pdu);
                     this.socket.emit(pdu.command, pdu);
 
-                    if (bindRespCommands.has(pdu.command) && pdu.command_status === 0) {
+                    if (bindRespCommands.includes(pdu.command) && pdu.command_status === 0) {
                         this.bound = true;
                     }
                 }
