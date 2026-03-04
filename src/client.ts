@@ -56,6 +56,8 @@ export default class Client implements IClient {
         interfaceVersion: InterfaceVersion;
         /**
          * Default interval 20000
+         *
+         * When use 'bind' by default, the enquire link will be sent after the bind is successful.
          */
         enquireLink: { auto: boolean; when?: 'connect' | 'bind'; interval?: number };
         secure: { tls?: boolean; unsafeBuffer?: boolean; secureOptions?: SecureContextOptions };
