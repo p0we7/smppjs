@@ -199,7 +199,9 @@ export default class Client implements IClient {
             }, interval);
         };
 
+    if (!this._enquireLinkTimeout) {
         scheduleNext();
+    }
     }
 
     private stopEnquireLink(): void {
