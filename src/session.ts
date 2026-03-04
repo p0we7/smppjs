@@ -105,21 +105,38 @@ export default class Session {
 
     initResponseRead(): void {
         this.socket.on('readable', () => {
-            try {
-                const data = this.socket.read();
+            let data: Buffer | null;
 
-                if (data) {
-                    const pdu = this.PDU.readPdu(data);
-                    this.logger.debug(`${pdu.command} - received`, pdu);
-                    this.socket.emit('pdu', pdu);
-                    this.socket.emit(pdu.command, pdu);
+            while ((data = this.socket.read()) !== null) {
+                try {
+                    let offset = 0;
 
-                    if (bindRespCommands.includes(pdu.command) && pdu.command_status === 0) {
-                        this.bound = true;
+                    while (offset < data.length) {
+                        if (data.length - offset < 4) {
+                            break;
+                        }
+
+                        const pduLength = data.readUInt32BE(offset);
+
+                        if (data.length - offset < pduLength) {
+                            break;
+                        }
+
+                        const pduBuffer = data.subarray(offset, offset + pduLength);
+                        const pdu = this.PDU.readPdu(pduBuffer);
+                        this.logger.debug(`${pdu.command} - received`, pdu);
+                        this.socket.emit('pdu', pdu);
+                        this.socket.emit(pdu.command, pdu);
+
+                        if (bindRespCommands.includes(pdu.command) && pdu.command_status === 0) {
+                            this.bound = true;
+                        }
+
+                        offset += pduLength;
                     }
+                } catch (error) {
+                    this.socket.emit('error', error);
                 }
-            } catch (error) {
-                this.socket.emit('error', error);
             }
         });
     }
