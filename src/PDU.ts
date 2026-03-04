@@ -6,6 +6,14 @@ import { DTO, DTOFunction, Encode, IPDU, Pdu, SendCommandName, OptionalParamKey,
 
 const HEADER_COMMAND_LENGTH = 16;
 
+interface ParsedUdhConcat {
+    udhLength: number;
+    concatIei: number;
+    referenceNumber: number;
+    totalParts: number;
+    partNumber: number;
+}
+
 export default class PDU implements IPDU {
     constructor(
         private socket: Socket,
@@ -211,6 +219,7 @@ export default class PDU implements IPDU {
 
         let dataCoding: number | undefined;
         let smLength: number | undefined;
+        let esmClass: number | undefined;
         let noUnsuccess: number | undefined;
 
         for (const key in pduParams) {
@@ -220,22 +229,39 @@ export default class PDU implements IPDU {
 
             if (type === 'Cstring') {
                 if (key === 'short_message' && dataCoding !== undefined) {
-                    const encoding = encodesName[dataCoding];
+                    const encoding = encodesName[dataCoding] || 'ascii';
+                    const shortMessageLength = smLength || 0;
 
-                    if (encoding === 'ucs2' && smLength !== undefined && smLength > 0) {
-                        params[key] = octets.Cstring.convertFromUtf16be(pduBuffer, offset, smLength);
+                    const shortMessageRaw = shortMessageLength > 0
+                        ? pduBuffer.subarray(offset, offset + shortMessageLength)
+                        : Buffer.alloc(0);
+
+                    const hasUdhi = esmClass !== undefined && (esmClass & 0x40) === 0x40;
+                    const parsedUdh = hasUdhi
+                        ? this.parseConcatenatedUdh(shortMessageRaw)
+                        : null;
+
+                    let contentOffset = 0;
+
+                    if (parsedUdh) {
+                        contentOffset = parsedUdh.udhLength;
+                        params['has_udh'] = 1;
+                        params['udh_length'] = parsedUdh.udhLength;
+                        params['udh_concat_iei'] = parsedUdh.concatIei;
+                        params['udh_concat_ref'] = parsedUdh.referenceNumber;
+                        params['udh_concat_total'] = parsedUdh.totalParts;
+                        params['udh_concat_seq'] = parsedUdh.partNumber;
+                    }
+
+                    const payload = shortMessageRaw.subarray(contentOffset);
+
+                    if (encoding === 'ucs2') {
+                        params[key] = octets.Cstring.convertFromUtf16be(payload, 0, payload.length);
                     } else {
-                        params[key] = octets.Cstring.read({
-                            buffer: pduBuffer,
-                            offset,
-                            encoding,
-                            length: smLength,
-                        });
+                        params[key] = payload.toString(encoding);
                     }
 
-                    if (smLength) {
-                        offset += smLength;
-                    }
+                    offset += shortMessageLength;
                 } else {
                     params[key] = octets.Cstring.read({ buffer: pduBuffer, offset });
                     offset += octets.Cstring.size((params[key] as string) || (value as string));
@@ -245,6 +271,10 @@ export default class PDU implements IPDU {
             if (type === 'Int8') {
                 params[key] = octets.Int8.read({ buffer: pduBuffer, offset });
                 offset += octets.Int8.size();
+
+                if (key === 'esm_class') {
+                    esmClass = params[key] as number;
+                }
 
                 if (key === 'data_coding') {
                     dataCoding = params[key] as number;
@@ -286,6 +316,55 @@ export default class PDU implements IPDU {
         }
 
         return { params, offset };
+    }
+
+    private parseConcatenatedUdh(shortMessageRaw: Buffer): ParsedUdhConcat | null {
+        if (shortMessageRaw.length < 1) {
+            return null;
+        }
+
+        const udhLength = shortMessageRaw[0] + 1;
+
+        if (udhLength <= 1 || udhLength > shortMessageRaw.length) {
+            return null;
+        }
+
+        let offset = 1;
+
+        while (offset + 1 < udhLength) {
+            const iei = shortMessageRaw[offset];
+            const iedl = shortMessageRaw[offset + 1];
+            const ieDataStart = offset + 2;
+            const ieDataEnd = ieDataStart + iedl;
+
+            if (ieDataEnd > udhLength) {
+                return null;
+            }
+
+            if (iei === 0x00 && iedl === 3) {
+                return {
+                    udhLength,
+                    concatIei: iei,
+                    referenceNumber: shortMessageRaw[ieDataStart],
+                    totalParts: shortMessageRaw[ieDataStart + 1],
+                    partNumber: shortMessageRaw[ieDataStart + 2],
+                };
+            }
+
+            if (iei === 0x08 && iedl === 4) {
+                return {
+                    udhLength,
+                    concatIei: iei,
+                    referenceNumber: shortMessageRaw.readUInt16BE(ieDataStart),
+                    totalParts: shortMessageRaw[ieDataStart + 2],
+                    partNumber: shortMessageRaw[ieDataStart + 3],
+                };
+            }
+
+            offset = ieDataEnd;
+        }
+
+        return null;
     }
 
     private readTlvsPdu({
