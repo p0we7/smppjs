@@ -78,6 +78,22 @@ class Cstring {
     }
 
     /**
+     * Convert from utf16be (Big Endian)
+     */
+    static convertFromUtf16be(buffer: Buffer, offset: number, length: number): string {
+        const raw = buffer.subarray(offset, offset + length);
+
+        const swapped = Buffer.alloc(raw.length);
+
+        for (let i = 0; i < raw.length; i += 2) {
+            swapped[i] = raw[i + 1];
+            swapped[i + 1] = raw[i];
+        }
+
+        return swapped.toString('ucs2', 0, swapped.length);
+    }
+
+    /**
      * Convert to utf16be (Big Endian)
      */
     static convertToUtf16be(value: Buffer | string): Buffer {
