@@ -34,7 +34,10 @@ class Cstring {
         }
 
         valueBuffer.copy(buffer, offset);
-        buffer[offset + valueBuffer.length] = 0;
+
+        if (!setLength) {
+            buffer[offset + valueBuffer.length] = 0;
+        }
 
         return buffer;
     }
@@ -72,6 +75,22 @@ class Cstring {
         const nullIndex = buffer.indexOf(0, offset);
         const endIndex = nullIndex === -1 ? buffer.length : nullIndex;
         return buffer.toString(encoding, offset, endIndex);
+    }
+
+    /**
+     * Convert from utf16be (Big Endian)
+     */
+    static convertFromUtf16be(buffer: Buffer, offset: number, length: number): string {
+        const raw = buffer.subarray(offset, offset + length);
+
+        const swapped = Buffer.alloc(raw.length);
+
+        for (let i = 0; i < raw.length; i += 2) {
+            swapped[i] = raw[i + 1];
+            swapped[i + 1] = raw[i];
+        }
+
+        return swapped.toString('ucs2', 0, swapped.length);
     }
 
     /**

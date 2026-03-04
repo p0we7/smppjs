@@ -222,12 +222,16 @@ export default class PDU implements IPDU {
                 if (key === 'short_message' && dataCoding !== undefined) {
                     const encoding = encodesName[dataCoding];
 
-                    params[key] = octets.Cstring.read({
-                        buffer: pduBuffer,
-                        offset,
-                        encoding,
-                        length: smLength,
-                    });
+                    if (encoding === 'ucs2' && smLength !== undefined && smLength > 0) {
+                        params[key] = octets.Cstring.convertFromUtf16be(pduBuffer, offset, smLength);
+                    } else {
+                        params[key] = octets.Cstring.read({
+                            buffer: pduBuffer,
+                            offset,
+                            encoding,
+                            length: smLength,
+                        });
+                    }
 
                     if (smLength) {
                         offset += smLength;

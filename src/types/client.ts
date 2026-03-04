@@ -34,6 +34,11 @@ export interface IClient {
     disconnect(): boolean;
 
     /**
+     * Whether the session has been successfully bound to the SMSC.
+     */
+    readonly bound: boolean;
+
+    /**
      *
      * @param eventName
      * @param callback

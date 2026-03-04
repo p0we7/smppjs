@@ -20,7 +20,7 @@ import type { DTOPayloadMap } from './dtos';
 export default class Client implements IClient {
     private readonly session: Session;
     private _debug: boolean;
-    private _enquireLink: { auto: boolean; interval?: number };
+    private _enquireLink: { auto: boolean; when?: 'connect' | 'bind'; interval?: number };
     /**
      * Uses ReturnType<typeof setTimeout> to automatically infer the correct type to old node versions.
      */
@@ -32,6 +32,10 @@ export default class Client implements IClient {
 
     public get connected(): boolean {
         return this.session.connected;
+    }
+
+    public get bound(): boolean {
+        return this.session.bound;
     }
 
     /**
@@ -52,8 +56,10 @@ export default class Client implements IClient {
         interfaceVersion: InterfaceVersion;
         /**
          * Default interval 20000
+         *
+         * When use 'bind' by default, the enquire link will be sent after the bind is successful.
          */
-        enquireLink: { auto: boolean; interval?: number };
+        enquireLink: { auto: boolean; when?: 'connect' | 'bind'; interval?: number };
         secure: { tls?: boolean; unsafeBuffer?: boolean; secureOptions?: SecureContextOptions };
         timeout?: number;
         debug?: boolean;
@@ -61,6 +67,7 @@ export default class Client implements IClient {
         this._debug = debug;
         this._enquireLink = enquireLink;
         this._enquireLink.interval = this._enquireLink.interval || 20000;
+        this._enquireLink.when = this._enquireLink.when || 'bind';
 
         this.session = new Session(interfaceVersion, this.debug, timeout, secure);
     }
@@ -70,8 +77,20 @@ export default class Client implements IClient {
         this.session.connect({ host, port });
 
         if (this._enquireLink.auto && this._enquireLink.interval) {
-            this.enquireLink();
-            this.autoEnquireLink(this._enquireLink.interval);
+            const interval = this._enquireLink.interval;
+
+            if (this._enquireLink.when === 'connect') {
+                this.enquireLink();
+                this.autoEnquireLink(interval);
+            } else {
+                const onBound = (pdu: Pdu) => {
+                    if (pdu.command_status === 0) this.autoEnquireLink(interval);
+                };
+
+                for (const evt of ['bind_transceiver_resp', 'bind_transmitter_resp', 'bind_receiver_resp'] as const) {
+                    this.on(evt, onBound);
+                }
+            }
         }
     }
 
@@ -190,7 +209,9 @@ export default class Client implements IClient {
             }, interval);
         };
 
-        scheduleNext();
+        if (!this._enquireLinkTimeout) {
+            scheduleNext();
+        }
     }
 
     private stopEnquireLink(): void {
