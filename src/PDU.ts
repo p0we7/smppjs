@@ -3,16 +3,9 @@ import { getDTO } from './dtos/index';
 import { octets } from './octets';
 import { CommandStatus, CommandStatusInfo, commandsId, commandsName, optionalParams, encodesName } from './constains';
 import { DTO, DTOFunction, Encode, IPDU, Pdu, SendCommandName, OptionalParamKey, DTOCommand } from './types';
+import { parseConcatenatedUdh } from './utils/udh.js';
 
 const HEADER_COMMAND_LENGTH = 16;
-
-interface ParsedUdhConcat {
-    udhLength: number;
-    concatIei: number;
-    referenceNumber: number;
-    totalParts: number;
-    partNumber: number;
-}
 
 export default class PDU implements IPDU {
     constructor(
@@ -238,7 +231,7 @@ export default class PDU implements IPDU {
 
                     const hasUdhi = esmClass !== undefined && (esmClass & 0x40) === 0x40;
                     const parsedUdh = hasUdhi
-                        ? this.parseConcatenatedUdh(shortMessageRaw)
+                        ? parseConcatenatedUdh(shortMessageRaw)
                         : null;
 
                     let contentOffset = 0;
@@ -316,55 +309,6 @@ export default class PDU implements IPDU {
         }
 
         return { params, offset };
-    }
-
-    private parseConcatenatedUdh(shortMessageRaw: Buffer): ParsedUdhConcat | null {
-        if (shortMessageRaw.length < 1) {
-            return null;
-        }
-
-        const udhLength = shortMessageRaw[0] + 1;
-
-        if (udhLength <= 1 || udhLength > shortMessageRaw.length) {
-            return null;
-        }
-
-        let offset = 1;
-
-        while (offset + 1 < udhLength) {
-            const iei = shortMessageRaw[offset];
-            const iedl = shortMessageRaw[offset + 1];
-            const ieDataStart = offset + 2;
-            const ieDataEnd = ieDataStart + iedl;
-
-            if (ieDataEnd > udhLength) {
-                return null;
-            }
-
-            if (iei === 0x00 && iedl === 3) {
-                return {
-                    udhLength,
-                    concatIei: iei,
-                    referenceNumber: shortMessageRaw[ieDataStart],
-                    totalParts: shortMessageRaw[ieDataStart + 1],
-                    partNumber: shortMessageRaw[ieDataStart + 2],
-                };
-            }
-
-            if (iei === 0x08 && iedl === 4) {
-                return {
-                    udhLength,
-                    concatIei: iei,
-                    referenceNumber: shortMessageRaw.readUInt16BE(ieDataStart),
-                    totalParts: shortMessageRaw[ieDataStart + 2],
-                    partNumber: shortMessageRaw[ieDataStart + 3],
-                };
-            }
-
-            offset = ieDataEnd;
-        }
-
-        return null;
     }
 
     private readTlvsPdu({
